@@ -275,11 +275,41 @@ def test_wordcount():
     shutil.rmtree("wordcount1")
 
 
+def test_wordcount2():
+    from nhmr.mapreduce import DataSource
+
+    DataSource([_test_data]) \
+        .flat_map(lambda x: x.split("\n")) \
+        .map(lambda x: x.strip()) \
+        .filter(lambda x: len(x) > 0) \
+        .flat_map(lambda x: x.split()) \
+        .map(lambda x: (x, 1)) \
+        .reduce(lambda x, y: x + y) \
+        .sort(ascending=False, key_fn=lambda x: x[1]) \
+        .persist("wordcount", serialize_fn=lambda x: f"{x[0]}\t{x[1]}")
+
+    DataSource([_test_data]) \
+        .flat_map(lambda x: x.split("\n")) \
+        .map(lambda x: x.strip()) \
+        .filter(lambda x: len(x) > 0) \
+        .flat_map(lambda x: x.split()) \
+        .map(lambda x: (x, 1)) \
+        .reduce(lambda x, y: x + y, memory_check_frequency=1, taken_memory_thresh_mb=0.0001) \
+        .sort(ascending=False, key_fn=lambda x: x[1]) \
+        .persist("wordcount1", serialize_fn=lambda x: f"{x[0]}\t{x[1]}")
+
+    for entry, truth in zip(open("wordcount/part_00000"), open("wordcount1/part_00000")):
+        assert entry == truth, f"{repr(entry)} != {repr(truth)}"
+
+    shutil.rmtree("wordcount")
+    shutil.rmtree("wordcount1")
+
+
 if __name__ == "__main__":
-    # test_data_source()
-    # test_map_job()
-    # test_cache_job()
-    # test_sort()
-    # test_shuffler()
+    test_data_source()
+    test_map_job()
+    test_cache_job()
+    test_sort()
     test_reduce()
     test_wordcount()
+    test_wordcount2()

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import os
-import pickle
 import tempfile
 from abc import ABC, abstractmethod
 from ast import literal_eval
@@ -10,7 +8,7 @@ from bisect import bisect_left
 from collections import defaultdict
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Union, Iterable, Callable, Optional, List, Any
+from typing import Union, Iterable, Callable, Optional, List
 
 from psutil import Process, virtual_memory
 from tqdm import tqdm
@@ -61,140 +59,6 @@ class ChunkWriter:
         self._close_last_chunk()
 
 
-# class Shuffler:
-#     delimiter = "\t"
-#
-#     def __init__(self, path: Path, pre_shuffle_shard_size=1000000):
-#         self._path = path
-#         self._path.mkdir(exist_ok=False)
-#         self._writer = ChunkWriter(self._path, pre_shuffle_shard_size)
-#
-#     @staticmethod
-#     def serialize(obj):
-#         # TODO
-#         # json takes too much time
-#         return json.dumps(pickle.dumps(obj, protocol=0).decode("ascii"))
-#
-#     @staticmethod
-#     def deserialize(line):
-#         return pickle.loads(json.loads(line).encode("ascii"))
-#
-#     @classmethod
-#     def kv_to_str(cls, key, val):
-#         if isinstance(key, str):
-#             assert cls.delimiter not in key
-#         return f"{repr(key)}{cls.delimiter}{cls.serialize(val)}"
-#
-#     @classmethod
-#     def get_key_from_record(cls, line):
-#         # TODO
-#         # literal_eval takes too much time
-#         return literal_eval(line[:line.find(cls.delimiter)])
-#
-#     @classmethod
-#     def get_value_from_records(cls, line):
-#         return cls.deserialize(line[line.find(cls.delimiter) + 1:])
-#
-#     @classmethod
-#     def get_kv_from_record(cls, line):
-#         pos = line.find(cls.delimiter)
-#         return literal_eval(line[:pos]), cls.deserialize(line[pos + 1:])
-#
-#     def write_sorted(self, shard):
-#         keys = list(shard.keys())
-#         keys.sort()
-#
-#         for key in keys:
-#             value = shard[key]
-#             to_write = self.kv_to_str(key, value)
-#             self._writer.dump_single(to_write)
-#         self._writer.finalize()
-#
-#     # @staticmethod
-#     # def close_empty(files, first_lines):
-#     #     filtered_files = []
-#     #     filtered_lines = []
-#     #
-#     #     for file, line in zip(files, first_lines):
-#     #         if line == "":
-#     #             file.close()
-#     #         else:
-#     #             filtered_files.append(file)
-#     #             filtered_lines.append(line)
-#     #
-#     #     return filtered_files, filtered_lines
-#
-#     def merge_files(self, files, level, ind):
-#         f = [open(file, "r") for file in files]
-#         lines = [file.readline() for file in f]
-#
-#         keys = [self.get_key_from_record(line) for line in lines]
-#
-#         sorted_ind = sorted(list(range(len(keys))), key=lambda x: keys[x])
-#         sorted_keys = [keys[i] for i in sorted_ind]
-#         sorted_lines = [lines[i] for i in sorted_ind]
-#
-#         del keys
-#         del lines
-#
-#         sorted_path = self._path.joinpath(f"sorted_{level}_{ind}")
-#
-#         with open(sorted_path, "w") as sink:
-#             while len(sorted_ind) > 0:
-#                 min_ind = sorted_ind.pop(0)
-#                 _ = sorted_keys.pop(0)
-#                 min_line = sorted_lines.pop(0)
-#                 sink.write(min_line)
-#
-#                 new_line = f[min_ind].readline()
-#
-#                 if new_line == "":
-#                     f[min_ind].close()
-#                 else:
-#                     new_key = self.get_key_from_record(new_line)
-#                     ins_pos = bisect_left(sorted_keys, new_key)
-#
-#                     sorted_lines.insert(ins_pos, new_line)
-#                     sorted_keys.insert(ins_pos, new_key)
-#                     sorted_ind.insert(ins_pos, min_ind)
-#
-#         return sorted_path
-#
-#     def merge_sorted(self, files, merge_chunks=20, level=0):
-#
-#         if len(files) == 1:
-#             return files[0]
-#
-#         to_merge = []
-#         merged = []
-#
-#         while len(files) > 0:
-#             to_merge.append(files.pop(0))
-#
-#             if len(to_merge) >= merge_chunks or len(files) == 0:
-#                 merged.append(self.merge_files(to_merge, level, ind=len(merged)))
-#                 for file in to_merge:
-#                     os.remove(file)
-#                 to_merge.clear()
-#
-#         return self.merge_sorted(merged, level=level + 1)
-#
-#     def sort(self):
-#         parts = self._writer.get_chunks()
-#         assert len(parts) > 0
-#
-#         return self.merge_sorted(parts)
-#
-#     def get_sorted(self):
-#         self._writer.finalize()
-#
-#         sorted_path = self.sort()
-#         with open(sorted_path, "r") as sorted_:
-#             for line in sorted_:
-#                 k, v = self.get_kv_from_record(line.strip())
-#                 yield k, v
-
-
 class MapReduceNode(ABC):
     """
     Base class for map and reduce operations
@@ -214,9 +78,10 @@ class MapReduceNode(ABC):
         """
         Create an instance of MapReduceNode
         :param data_source: can be either a MapReduceNode from the previous stage or an iterable
-        :param map_fn: Map function. Used only from Map, FlatMap and Filter jobs. Should be serializable when using parallel map.
-        :param reduce_fn: Reduce function. Used only for Reduce jobs.
-        :param path: Path where intermediate results are stored. Used for Cache job.
+        :param map_fn: Map function. Used only from Map, FlatMap and Filter jobs. Should be serializable when using
+        parallel map
+        :param reduce_fn: Reduce function. Used only for Reduce jobs
+        :param path: Path where intermediate results are stored. Used for Cache job
         """
         if not isinstance(data_source, MapReduceNode):
             assert map_fn is None and reduce_fn is None, f"map and reduce are invalid for the data source"
@@ -281,10 +146,10 @@ class MapReduceNode(ABC):
 
     @abstractmethod
     def _init_job(self):
-        ...
+        yield from ...
 
     def __iter__(self):
-        self._init_job()
+        self._stream = self._init_job()
         return self
 
     def __next__(self):
@@ -329,7 +194,7 @@ class DataSource(MapReduceNode):
         super().__init__(data_source)
 
     def _init_job(self):
-        self._stream = iter(self._data_source)
+        yield from self._data_source
 
 
 class TextSource(MapReduceNode):
@@ -358,7 +223,7 @@ class TextSource(MapReduceNode):
                 yield item
 
     def _init_job(self):
-        self._stream = iter(self._data_source)
+        yield from self._data_source
 
 
 class MapJob(MapReduceNode):
@@ -413,13 +278,7 @@ class MapJob(MapReduceNode):
         else:
             mapped = map(self._map_fn, stream)
 
-        self._stream = mapped
-
-    # def __del__(self):
-    #     if self._allow_parallel:
-    #         self._pool.terminate()
-    #         self._pool.close()
-    #         self._pool.join()
+        yield from mapped
 
 
 class FilterJob(MapJob):
@@ -428,8 +287,8 @@ class FilterJob(MapJob):
 
     def _init_job(self):
         assert self._map_fn is not None
-        mapped = filter(self._map_fn, self._parent)
-        self._stream = mapped
+        filtered = filter(self._map_fn, self._parent)
+        yield from filtered
 
 
 class FlatMapJob(MapJob):
@@ -437,13 +296,11 @@ class FlatMapJob(MapJob):
         super().__init__(*args, **kwargs)
 
     def _init_job(self):
-        super()._init_job()
-
         def yield_from_mapped(mapped):
             for m in mapped:
                 yield from m
 
-        self._stream = yield_from_mapped(self._stream)
+        yield from yield_from_mapped(super()._init_job())
 
 
 class PersistJob(MapReduceNode):
@@ -460,6 +317,9 @@ class PersistJob(MapReduceNode):
         super().__init__(*args, **kwargs)
         self._serialize_fn = serialize_fn
         self._init_job()
+
+    def __iter__(self):
+        raise NotImplementedError("PersistJob does not support iteration")
 
     def _init_job(self):
         for item in self._parent:
@@ -478,7 +338,7 @@ class CacheJob(MapReduceNode):
                 self._writer.dump_single(item)
                 yield item
 
-        self._stream = cache_and_return(self._parent)
+        yield from cache_and_return(self._parent)
 
 
 class SortJob(MapReduceNode):
@@ -515,7 +375,7 @@ class SortJob(MapReduceNode):
         if len(buffer) > 0:
             self._write_sorted_buffer(buffer)
 
-        self._stream = self._get_sorted()
+        yield from self._get_sorted()
 
     def _serialize(self, value):
         try:
@@ -618,17 +478,12 @@ class _PreReduce(MapReduceNode):
     
     def __init__(
             self, *args, memory_check_frequency=1000000, free_memory_thresh_mb=500,
-            taken_memory_thresh_mb=4000, sort_job_chunk_size=1000000, serialize_fn=None,
-            deserialize_fn=None, **kwargs
+            taken_memory_thresh_mb=4000, **kwargs
     ):
         super(_PreReduce, self).__init__(*args, **kwargs)
         self._memory_check_frequency = memory_check_frequency
         self._free_memory_thresh_mb = free_memory_thresh_mb
         self._taken_memory_thresh_mb = taken_memory_thresh_mb
-        # self._sort_job = SortJob(
-        #     self, chunk_size_lines=sort_job_chunk_size, serialize_fn=serialize_fn,
-        #     deserialize_fn=deserialize_fn, key_fn=lambda x: x[0], ascending=True
-        # )
 
     @staticmethod
     def _create_buffer_storage():
@@ -647,7 +502,7 @@ class _PreReduce(MapReduceNode):
             return value
         return self._reduce_fn(accumulator, value)
 
-    def _pre_reduce(self):
+    def _init_job(self):
         temp_storage_shard = self._create_buffer_storage()
 
         processed = 0
@@ -675,12 +530,8 @@ class _PreReduce(MapReduceNode):
             yield from temp_storage_shard.items()
             temp_storage_shard.clear()
 
-    def _init_job(self):
-        self._stream = self._pre_reduce()
-
 
 class ReduceJob(MapReduceNode):
-    # _shuffler: Shuffler
     _memory_check_frequency: int
     _free_memory_thresh_mb: Union[float, int]
     _taken_memory_thresh_mb: Union[float, int]
@@ -693,7 +544,7 @@ class ReduceJob(MapReduceNode):
     ):
         """
         Create a reduce job. Keeps trying to keep the result in-memory unless a limit on free memory or a limit
-        on consumed memory is exceeded.
+        on consumed memory is exceeded
         :param args: arguments for MapReduceNode
         :param memory_check_frequency: The frequency for checking consumed and free memory. One iteration is one call
         of `reduce_fn`
@@ -712,63 +563,13 @@ class ReduceJob(MapReduceNode):
             key_fn=lambda x: x[0], ascending=True
         )
         super().__init__(sort_job, **kwargs)
-        # shuffle_path = self._path
-        # if shuffle_path is None:
-        #     shuffle_path = self._get_temp_path()
-        # else:
-        #     shuffle_path = shuffle_path.joinpath("shuffle")
-        # self._shuffler = shuffler_class(shuffle_path)
-        self._memory_check_frequency = memory_check_frequency
-        self._free_memory_thresh_mb = free_memory_thresh_mb
-        self._taken_memory_thresh_mb = taken_memory_thresh_mb
-
-        # assert self._reduce_fn is not None
-
-
-
-    # @staticmethod
-    # def _create_buffer_storage():
-    #     return defaultdict(lambda: None)
-    #
-    # @staticmethod
-    # def _get_occupied_memory_mb():
-    #     return Process(os.getpid()).memory_info().rss / 1024 / 1024
-    #
-    # @staticmethod
-    # def _get_free_memory_mb():
-    #     return virtual_memory().available / 1024 / 1024
-
-    # def _pre_reduce(
-    #         self, stream
-    # ):
-    #     temp_storage_shard = self._create_buffer_storage()
-    #
-    #     processed = 0
-    #     for map_id, map_val in tqdm(stream, desc=self._get_stage_name(stream)):
-    #         temp_storage_shard[map_id] = self._reduce_fn(
-    #             temp_storage_shard.get(map_id, self._default_acc_value), map_val
-    #         )
-    #         processed += 1
-    #
-    #         if processed % self._memory_check_frequency == 0:
-    #             if (
-    #                     self._get_occupied_memory_mb() >= self._taken_memory_thresh_mb or
-    #                     self._get_free_memory_mb() < self._free_memory_thresh_mb
-    #             ):
-    #                 self._shuffler.write_sorted(temp_storage_shard)
-    #
-    #                 del temp_storage_shard
-    #                 temp_storage_shard = self._create_buffer_storage()
-    #
-    #     if len(temp_storage_shard) > 0:
-    #         self._shuffler.write_sorted(temp_storage_shard)
 
     def _reduce(self, accumulator, value):
         if accumulator is None:
             return value
         return self._reduce_fn(accumulator, value)
 
-    def _do_reduce(self):
+    def _init_job(self):
         last_key = None
         reduced_value = None
         for ind, (key, value) in enumerate(tqdm(self._parent, desc=self._get_stage_name(self))):
@@ -781,11 +582,3 @@ class ReduceJob(MapReduceNode):
 
         if last_key is not None:
             yield last_key, reduced_value
-
-    def _init_job(self):
-        self._stream = self._do_reduce()
-
-    # def _init_job(self):
-    #     assert self._reduce_fn is not None
-    #     self._pre_reduce(self._parent)
-    #     self._stream = self._reduce()
