@@ -158,27 +158,6 @@ def test_cache_job():
     shutil.rmtree("stage_3")
 
 
-# def test_shuffler():
-#     from nhmr.mapreduce import DataSource
-#     from nhmr.mapreduce import Shuffler
-#     from pathlib import Path
-#     from collections import Counter
-#
-#     words = DataSource([_test_data]) \
-#         .flat_map(lambda x: x.split("\n")) \
-#         .map(lambda x: x.strip()) \
-#         .filter(lambda x: len(x) > 0) \
-#         .flat_map(lambda x: x.split())
-#
-#     shuffler = Shuffler(Path("shuffler"), pre_shuffle_shard_size=100)
-#     shuffler.write_sorted(Counter(words))
-#     for key, val in shuffler.get_sorted():
-#         pass
-#         # print(key, val)
-#
-#     shutil.rmtree("shuffler")
-
-
 def test_reduce():
     from nhmr.mapreduce import DataSource
     from collections import Counter
@@ -305,11 +284,11 @@ def test_wordcount2():
     shutil.rmtree("wordcount1")
 
 
-if __name__ == "__main__":
-    test_data_source()
-    test_map_job()
-    test_cache_job()
-    test_sort()
-    test_reduce()
-    test_wordcount()
-    test_wordcount2()
+# if __name__ == "__main__":
+#     test_data_source()
+#     test_map_job()
+#     test_cache_job()
+#     test_sort()
+#     test_reduce()
+#     test_wordcount()
+#     test_wordcount2()
