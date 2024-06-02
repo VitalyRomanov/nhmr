@@ -173,7 +173,7 @@ def test_reduce():
 
     word_count = DataSource(words) \
         .map(lambda x: (x, 1))\
-        .reduce(lambda x, y: x + y)
+        .reduce_by_key(lambda x, y: x + y)
 
     observed = 0
     for key, value in word_count:
@@ -235,7 +235,7 @@ def test_wordcount():
         .filter(lambda x: len(x) > 0) \
         .flat_map(lambda x: x.split()) \
         .map(lambda x: (x, 1)) \
-        .reduce(lambda x, y: x + y) \
+        .reduce_by_key(lambda x, y: x + y) \
         .persist("wordcount", serialize_fn=lambda x: f"{x[0]}\t{x[1]}")
 
     DataSource([_test_data]) \
@@ -244,7 +244,7 @@ def test_wordcount():
         .filter(lambda x: len(x) > 0) \
         .flat_map(lambda x: x.split()) \
         .map(lambda x: (x, 1)) \
-        .reduce(lambda x, y: x + y, memory_check_frequency=1, taken_memory_thresh_mb=0.0001) \
+        .reduce_by_key(lambda x, y: x + y, memory_check_frequency=1, taken_memory_thresh_mb=0.0001) \
         .persist("wordcount1", serialize_fn=lambda x: f"{x[0]}\t{x[1]}")
 
     for entry, truth in zip(open("wordcount/part_00000"), open("wordcount1/part_00000")):
@@ -263,7 +263,7 @@ def test_wordcount2():
         .filter(lambda x: len(x) > 0) \
         .flat_map(lambda x: x.split()) \
         .map(lambda x: (x, 1)) \
-        .reduce(lambda x, y: x + y) \
+        .reduce_by_key(lambda x, y: x + y) \
         .sort(ascending=False, key_fn=lambda x: x[1]) \
         .persist("wordcount", serialize_fn=lambda x: f"{x[0]}\t{x[1]}")
 
@@ -273,7 +273,7 @@ def test_wordcount2():
         .filter(lambda x: len(x) > 0) \
         .flat_map(lambda x: x.split()) \
         .map(lambda x: (x, 1)) \
-        .reduce(lambda x, y: x + y, memory_check_frequency=1, taken_memory_thresh_mb=0.0001) \
+        .reduce_by_key(lambda x, y: x + y, memory_check_frequency=1, taken_memory_thresh_mb=0.0001) \
         .sort(ascending=False, key_fn=lambda x: x[1]) \
         .persist("wordcount1", serialize_fn=lambda x: f"{x[0]}\t{x[1]}")
 
@@ -282,6 +282,15 @@ def test_wordcount2():
 
     shutil.rmtree("wordcount")
     shutil.rmtree("wordcount1")
+
+
+def test_reduce():
+    from nhmr.mapreduce import DataSource
+
+    result = DataSource(range(10)) \
+        .reduce(lambda x, y: x + y)
+        
+    assert result.tolist() == [45]
 
 
 # if __name__ == "__main__":

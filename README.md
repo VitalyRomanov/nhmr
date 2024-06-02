@@ -20,7 +20,7 @@ TextSource("path/to/text") \
     .filter(lambda x: len(x) > 0) \
     .flat_map(lambda x: x.split()) \
     .map(lambda x: (x, 1)) \
-    .reduce(lambda x, y: x + y) \
+    .reduce_by_key(lambda x, y: x + y) \
     .sort(ascending=False, key_fn=lambda x: x[1]) \
     .persist("wordcount", serialize_fn=lambda x: f"{x[0]}\t{x[1]}")  # data is consumed during persist
 ```
@@ -72,3 +72,14 @@ data = DataSource(data_source()) \
 for item in data:
     print(item)
 ```
+
+## Branching DAG
+
+One of the main limitations at the moment is that only sequential transforms can be built. If want to do otherwise, need to:
+1. create a transform
+2. cache it or write to file
+3. make sure all the results are written to file
+4. create text reader that would stream from the disk
+
+This approach requires a certain program structure and is not ideal. However, given that pipelines from this package are not reusable with other packages, it does not make much sense to me to mimic their api at this stage. If need something more flexible it is better to resort to torchdata, tfx, or apache beam.    
+

@@ -168,6 +168,12 @@ class MapReduceNode(ABC):
         return FilterJob(self, map_fn=filter_fn)
 
     def reduce(self, reduce_fn, **kwargs):
+        # reuse `reduce_by_key`
+        add_key = MapJob(self, map_fn=lambda x: (0, x))
+        reduce = ReduceJob(add_key, reduce_fn=reduce_fn, **kwargs)
+        return MapJob(reduce, map_fn=lambda x: x[1])
+    
+    def reduce_by_key(self, reduce_fn, **kwargs):
         return ReduceJob(self, reduce_fn=reduce_fn, **kwargs)
 
     def persist(self, path, serialize_fn=None):
@@ -183,7 +189,9 @@ class MapReduceNode(ABC):
             self, key_fn=key_fn, ascending=ascending, chunk_size_lines=chunk_size_lines,
             serialize_fn=serialize_fn, deserialize_fn=deserialize_fn
         )
-
+    
+    def tolist(self):
+        return list(self)
 
 class DataSource(MapReduceNode):
     def __init__(self, data_source: Union[Iterable, MapReduceNode]):
@@ -200,27 +208,39 @@ class DataSource(MapReduceNode):
 class TextSource(MapReduceNode):
     _deserialize_fn: Optional[Callable]
 
-    def __init__(self, path, deserialize_fn=None):
+    def __init__(self, path, deserialize_fn=None, display_progress: bool=False):
         """
         Create data source from a file
         :param path: path to the file, each line should contain a single entry
         :param deserialize_fn: Callable to deserialize an entry. If not provided, data is treated as plain text
         """
         self._deserialize_fn = deserialize_fn
+        self._display_progress = display_progress
         super().__init__(self._read_text(path))
 
     def _read_text(self, path):
         path = Path(path)
-        for file in path.iterdir():
-            if file.is_dir() or file.name.startswith("."):
+
+        def iterate_lines(path):
+            if path.is_file():
+                yield from open(path)
+            elif path.is_dir():
+                for file in path.iterdir():
+                    if file.is_dir() or file.name.startswith("."):
+                        continue
+                    yield from open(file)
+
+        lines = iterate_lines(path)
+        # if self._display_progress:
+        #     lines = 
+
+        for line in tqdm(lines, desc=self._get_stage_name(self)):
+            if line == "":
                 continue
-            for line in open(file):
-                if line == "":
-                    continue
-                item = line[:-1]
-                if self._deserialize_fn is not None:
-                    item = self._deserialize_fn(item)
-                yield item
+            item = line[:-1]
+            if self._deserialize_fn is not None:
+                item = self._deserialize_fn(item)
+            yield item
 
     def _init_job(self):
         yield from self._data_source
@@ -326,6 +346,7 @@ class PersistJob(MapReduceNode):
             if self._serialize_fn is not None:
                 item = self._serialize_fn(item)
             self._writer.dump_single(item)
+        self._writer._close_last_chunk()
 
 
 class CacheJob(MapReduceNode):
